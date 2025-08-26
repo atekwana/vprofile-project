@@ -103,21 +103,21 @@ pipeline {
             slackSend(
                 channel: '#jenkinscicd',
                 color: 'good',
-                message: "*BUILD SUCCESS*\n" +
+                message: '*BUILD SUCCESS*\n' +
                         "*Job:* ${env.JOB_NAME}\n" +
                         "*Build:* #${env.BUILD_NUMBER}\n" +
                         "*Branch:* ${env.GIT_BRANCH}\n" +
                         "*Commit:* ${env.GIT_COMMIT.take(8)}\n" +
                         "*Duration:* ${currentBuild.durationString}\n" +
-                        "*Artifacts:* Uploaded to Nexus\n" +
-                        "*SonarQube:* Quality Gate PASSED"
+                        '*Artifacts:* Uploaded to Nexus\n' +
+                        '*SonarQube:* Quality Gate PASSED'
             )
         }
         failure {
             slackSend(
                 channel: '#jenkinscicd',
                 color: 'danger',
-                message: "*BUILD FAILED*\n" +
+                message: '*BUILD FAILED*\n' +
                         "*Job:* ${env.JOB_NAME}\n" +
                         "*Build:* #${env.BUILD_NUMBER}\n" +
                         "*Branch:* ${env.GIT_BRANCH}\n" +
@@ -130,10 +130,10 @@ pipeline {
             slackSend(
                 channel: '#jenkinscicd',
                 color: 'warning',
-                message: "*BUILD UNSTABLE*\n" +
+                message: '*BUILD UNSTABLE*\n' +
                         "*Job:* ${env.JOB_NAME}\n" +
                         "*Build:* #${env.BUILD_NUMBER}\n" +
-                        "*Quality Gate may have issues*"
+                        '*Quality Gate may have issues*'
             )
         }
     }
