@@ -81,7 +81,7 @@ pipeline {
                     protocol: 'http',
                     nexusUrl: "${NEXUSIP}:${NEXUSPORT}",
                     groupId: 'QA',
-                    version: "${evn.BUILD_ID}-${evn.BUILD_TIMESTAMP}",
+                    version: "${env.BUILD_ID}-${env.BUILD_TIMESTAMP}",
                     repository: "${RELEASE_REPO}",
                     credentialsId: "${NEXUS_LOGIN}",
                     artifacts: [
