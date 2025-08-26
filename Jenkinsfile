@@ -1,3 +1,7 @@
+def COLOR_MAP = [
+    'SUCCESS': 'good',
+    'FAILURE': 'danger',
+]
 /* groovylint-disable CompileStatic, GStringExpressionWithinString */
 pipeline {
     agent any
@@ -97,44 +101,10 @@ pipeline {
 
     post {
         always {
-            echo 'Pipeline execution completed'
-        }
-        success {
-            slackSend(
-                channel: '#jenkinscicd',
-                color: 'good',
-                message: '*BUILD SUCCESS*\n' +
-                        "*Job:* ${env.JOB_NAME}\n" +
-                        "*Build:* #${env.BUILD_NUMBER}\n" +
-                        "*Branch:* ${env.GIT_BRANCH}\n" +
-                        "*Commit:* ${env.GIT_COMMIT.take(8)}\n" +
-                        "*Duration:* ${currentBuild.durationString}\n" +
-                        '*Artifacts:* Uploaded to Nexus\n' +
-                        '*SonarQube:* Quality Gate PASSED'
-            )
-        }
-        failure {
-            slackSend(
-                channel: '#jenkinscicd',
-                color: 'danger',
-                message: '*BUILD FAILED*\n' +
-                        "*Job:* ${env.JOB_NAME}\n" +
-                        "*Build:* #${env.BUILD_NUMBER}\n" +
-                        "*Branch:* ${env.GIT_BRANCH}\n" +
-                        "*Commit:* ${env.GIT_COMMIT.take(8)}\n" +
-                        "*Duration:* ${currentBuild.durationString}\n" +
-                        "*Check:* ${env.BUILD_URL}console"
-            )
-        }
-        unstable {
-            slackSend(
-                channel: '#jenkinscicd',
-                color: 'warning',
-                message: '*BUILD UNSTABLE*\n' +
-                        "*Job:* ${env.JOB_NAME}\n" +
-                        "*Build:* #${env.BUILD_NUMBER}\n" +
-                        '*Quality Gate may have issues*'
-            )
+            echo 'Slack Notifications.'
+            slackSend channel: '#jenkinscicd',
+                color: COLOR_MAP[currentBuild.currentResult],
+                message: "*${currentBuild.currentResult}:* Job ${env.JOB_NAME} build ${env.BUILD_NUMBER} \n More info at : ${env.BUILD_URL}"
         }
     }
 }
