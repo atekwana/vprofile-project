@@ -1,7 +1,3 @@
-def COLOR_MAP = [
-    'SUCCESS': 'good',
-    'FAILURE': 'danger',
-]
 /* groovylint-disable CompileStatic, GStringExpressionWithinString */
 pipeline {
     agent any
@@ -26,30 +22,39 @@ pipeline {
         registryCredential = 'ecr:us-east-1:aws-creds'
         appRegistry = '593572207657.dkr.ecr.us-east-1.amazonaws.com/vprofile-app-image'
         vprofileRegistry = 'https://593572207657.dkr.ecr.us-east-1.amazonaws.com'
+        cluster = 'vprofile-app-staging'
+        service = 'vprofile-app-task-service-fk0fp32b'
+        APP_DIR = 'vprofile-project-cicd-awsjenkins/vprofile-project'
     }
 
     stages {
         stage('Build') {
             steps {
-                sh 'mvn -s settings.xml -DskipTests install'
+                dir("${APP_DIR}") {
+                    sh 'mvn -s settings.xml -DskipTests install'
+                }
             }
             post {
                 success {
                     echo 'Now Archiving.'
-                    archiveArtifacts artifacts: '**/*.war'
+                    archiveArtifacts artifacts: '**/target/*.war'
                 }
             }
         }
 
         stage('Test') {
             steps {
-                sh 'mvn -s settings.xml test'
+                dir("${APP_DIR}") {
+                    sh 'mvn -s settings.xml test'
+                }
             }
         }
 
         stage('Checkstyle Analysis') {
             steps {
-                sh 'mvn -s settings.xml checkstyle:checkstyle'
+                dir("${APP_DIR}") {
+                    sh 'mvn -s settings.xml checkstyle:checkstyle'
+                }
             }
         }
 
@@ -58,63 +63,83 @@ pipeline {
                 scannerHome = tool "${SONARSCANNER}"
             }
             steps {
-                withSonarQubeEnv("${SONARSERVER}") {
-                    sh '''${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=vprofile \
-                    -Dsonar.projectName=vprofile \
-                    -Dsonar.projectVersion=1.0 \
-                    -Dsonar.sources=src/ \
-                    -Dsonar.java.binaries=target/test-classes/com/visualpathit/account/controllerTest/ \
-                    -Dsonar.junit.reportsPath=target/surefire-reports/ \
-                    -Dsonar.jacoco.reportsPath=target/jacoco.exec \
-                    -Dsonar.java.checkstyle.reportPaths=target/checkstyle-result.xml'''
+                dir("${APP_DIR}") {
+                    withSonarQubeEnv("${SONARSERVER}") {
+                        sh '''${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=vprofile \
+                        -Dsonar.projectName=vprofile \
+                        -Dsonar.projectVersion=1.0 \
+                        -Dsonar.sources=src/ \
+                        -Dsonar.java.binaries=target/test-classes/com/visualpathit/account/controllerTest/ \
+                        -Dsonar.junit.reportsPath=target/surefire-reports/ \
+                        -Dsonar.jacoco.reportsPath=target/jacoco.exec \
+                        -Dsonar.java.checkstyle.reportPaths=target/checkstyle-result.xml'''
+                    }
                 }
             }
         }
 
         stage('Quality Gate') {
             steps {
-                timeout(time: 1, unit: 'HOURS') {
-                    // parameter indicates whether to set pipeline to UNSTABLE
-                    // true = set pipeline to UNSTABLE false = don't
-                    waitForQualityGate abortPipeline: true
+                dir("${APP_DIR}") {
+                    timeout(time: 1, unit: 'HOURS') {
+                        // parameter indicates whether to set pipeline to UNSTABLE
+                        // true = set pipeline to UNSTABLE false = don't
+                        waitForQualityGate abortPipeline: true
+                    }
                 }
             }
         }
         // upload artifact to nexus stage
         stage('UploadArtifacts') {
             steps {
-                    nexusArtifactUploader(
-                    nexusVersion: 'nexus3',
-                    protocol: 'http',
-                    nexusUrl: "${NEXUSIP}:${NEXUSPORT}",
-                    groupId: 'QA',
-                    version: "${env.BUILD_ID}-${env.BUILD_TIMESTAMP}",
-                    repository: "${RELEASE_REPO}",
-                    credentialsId: "${NEXUS_LOGIN}",
-                    artifacts: [
-                        [artifactId: 'vproapp',
-                        classifier: '',
-                        file: 'target/vprofile-v2.war',
-                        type: 'war']
-                    ]
-                )
+                dir("${APP_DIR}") {
+                        nexusArtifactUploader(
+                        nexusVersion: 'nexus3',
+                        protocol: 'http',
+                        nexusUrl: "${NEXUSIP}:${NEXUSPORT}",
+                        groupId: 'QA',
+                        version: "${env.BUILD_ID}-${env.BUILD_TIMESTAMP}",
+                        repository: "${RELEASE_REPO}",
+                        credentialsId: "${NEXUS_LOGIN}",
+                        artifacts: [
+                            [artifactId: 'vproapp',
+                            classifier: '',
+                            file: 'target/vprofile-v2.war',
+                            type: 'war']
+                        ]
+                    )
+                }
             }
         }
         // build app image stage
-        stage("Build App Image") {
+        stage('Build App Image') {
             steps {
-                script {
-                    dockerImage = docker.build(appRegistry + ":$BUILD_NUMBER", "./Docker-files/app/multistage/")
+                dir("${APP_DIR}") {
+                    script {
+                        dockerImage = docker.build(appRegistry + ":$BUILD_NUMBER", './Docker-files/app/multistage/')
+                    }
                 }
             }
         }
         // upload app image stage
-        stage("Upload App Image") {
+        stage('Upload App Image') {
             steps {
-                script {
-                    docker.withRegistry(vprofileRegistry, registryCredential) {
-                        dockerImage.push("$BUILD_NUMBER")
-                        dockerImage.push("latest")
+                dir("${APP_DIR}") {
+                    script {
+                        docker.withRegistry(vprofileRegistry, registryCredential) {
+                            dockerImage.push("$BUILD_NUMBER")
+                            dockerImage.push('latest')
+                        }
+                    }
+                }
+            }
+        }
+        // deploy container stage
+        stage('Deploy to Staging ECS') {
+            steps {
+                dir("${APP_DIR}") {
+                    withAWS(credentials: 'aws-creds', region: 'us-east-1') {
+                        sh 'aws ecs update-service --cluster ${cluster} --service ${service} --force-new-deployment'
                     }
                 }
             }
@@ -124,10 +149,10 @@ pipeline {
     post {
         always {
             echo 'Slack Notifications.'
-            // slackSend channel: '#jenkinscicd',
-            //     color: COLOR_MAP[currentBuild.currentResult],
-            //     /* groovylint-disable-next-line LineLength */
-            //     message: "*${currentBuild.currentResult}:* Job ${env.JOB_NAME} build ${env.BUILD_NUMBER} \n More info at : ${env.BUILD_URL}"
+        // slackSend channel: '#jenkinscicd',
+        //     color: COLOR_MAP[currentBuild.currentResult],
+        //     /* groovylint-disable-next-line LineLength */
+        //     message: "*${currentBuild.currentResult}:* Job ${env.JOB_NAME} build ${env.BUILD_NUMBER} \n More info at : ${env.BUILD_URL}"
         }
     }
 }
